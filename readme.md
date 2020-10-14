@@ -1,7 +1,7 @@
 # lodat (Local Database)
 
 Powerful persistent store for Javascript.
-Compatible with (localStorage, sessionStorage, AsyncStorage and many more)
+Compatible with (localStorage, sessionStorage, AsyncStorage, and many more)
 
 ## Installation
 
@@ -78,6 +78,22 @@ function* removeTodo(context, key) {
 const newTodo = await db.exec(addTodo);
 
 db.exec(removeTodo, newTodo.key);
+```
+
+## Querying entity
+
+```jsx
+function* getCompletedTodos(context) {
+  return yield context.todos.all((todo) => todo.completed);
+}
+
+function* getFirstCompletedTodos(context) {
+  return yield context.todos.get((todo) => todo.completed);
+}
+
+function* getTodoByKey(context, key) {
+  return yield context.todos.get(key);
+}
 ```
 
 ## Examples
