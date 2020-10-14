@@ -98,6 +98,9 @@ function* getTodoByKey(context, key) {
 
 ## Performance testing (TBD)
 
+Lodat is about 10x faster than lowdb
+[Add and update 1000 todos](https://codesandbox.io/s/lodat-benchmark-m4uv2?file=/src/index.js)
+
 ## References
 
 ### lodat(options)
