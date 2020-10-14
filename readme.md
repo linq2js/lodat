@@ -106,7 +106,7 @@ db.exec(removeTodo, newTodo.key);
 ### Database props
 
 | name                     | return               | description                                                                                            |
-| ------------------------ | -------------------- | ------------------------------------------------------------------------------------------------------ |
+| :----------------------- | -------------------- | ------------------------------------------------------------------------------------------------------ |
 | exec(executor, payload?) | Promise              | execute an executor with specified payload. Executor must be [Generator Function](#generator-function) |
 | subscribe(listener)      | Unsubscribe function | add a change listener. It will be called any time an data manipulated                                  |
 | clear()                  | void                 | clear all data                                                                                         |
@@ -115,7 +115,7 @@ db.exec(removeTodo, newTodo.key);
 ### Context props
 
 | name                     | type/return                    | description                                                                                                                             |
-| ------------------------ | ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
+| :----------------------- | ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
 | schema(name)             | [Schema](#schema-props) object | get specified schema by its name                                                                                                        |
 | get(name)                | Yield<any>                     | get value of specified database prop                                                                                                    |
 | set(name, value)         | Yield<void>                    | set value of specified database prop                                                                                                    |
@@ -126,7 +126,7 @@ db.exec(removeTodo, newTodo.key);
 ### Schema props
 
 | name                  | type/return          | description                                                                              |
-| --------------------- | -------------------- | ---------------------------------------------------------------------------------------- |
+| :-------------------- | -------------------- | ---------------------------------------------------------------------------------------- |
 | name                  | string               | schema name                                                                              |
 | create(props)         | Yield<Entity>        | create new entity with specified props                                                   |
 | exist(entityKey)      | Yield<bool>          | check entity existing by its key                                                         |
