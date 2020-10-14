@@ -153,6 +153,40 @@ test("all(predicate)", async () => {
   expect(completedTodos.length).toBe(2);
 });
 
+test("all(predicate, limit)", async () => {
+  const db = lodat();
+
+  await db.exec(function* ({ schema }) {
+    const todos = schema("todo");
+    yield todos.create({ completed: true });
+    yield todos.create({ completed: true });
+    yield todos.create({ completed: true });
+  });
+
+  const completedTodos = await db.exec(function* ({ schema }) {
+    return yield schema("todo").all((todo) => todo.completed, 2);
+  });
+
+  expect(completedTodos.length).toBe(2);
+});
+
+test("all(limit)", async () => {
+  const db = lodat();
+
+  await db.exec(function* ({ schema }) {
+    const todos = schema("todo");
+    yield todos.create({ completed: true });
+    yield todos.create({ completed: true });
+    yield todos.create({ completed: true });
+  });
+
+  const completedTodos = await db.exec(function* ({ schema }) {
+    return yield schema("todo").all(2);
+  });
+
+  expect(completedTodos.length).toBe(2);
+});
+
 test("event source", () => {
   const e = createEventSource();
   let c3 = undefined;

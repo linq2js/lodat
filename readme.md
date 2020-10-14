@@ -141,21 +141,23 @@ function* getTodoByKey(context, key) {
 
 ### Schema props
 
-| name                  | type/return          | description                                                                              |
-| :-------------------- | -------------------- | ---------------------------------------------------------------------------------------- |
-| name                  | string               | schema name                                                                              |
-| create(props)         | Yield<Entity>        | create new entity with specified props                                                   |
-| exist(entityKey)      | Yield<bool>          | check entity existing by its key                                                         |
-| remove(...entityKeys) | Yield<void>          | remove multiple entities by their keys                                                   |
-| count()               | Yield<number>        | return a number of entity in the schema                                                  |
-| all()                 | Yield<Entity[]>      | return all entities in the schema                                                        |
-| all(entityKeys)       | Yield<Entity[]>      | return all entities that matches given keys                                              |
-| all(predicateFn)      | Yield<Entity[]>      | return all entities that matches given **predicateFn**                                   |
-| get(entityKey)        | Yield<Entity>        | get entity by key                                                                        |
-| get(predicateFn)      | Yield<Entity>        | get first entity that matches given **predicateFn**                                      |
-| clear()               | Yield<void>          | clear all entities in the schema                                                         |
-| update(entity, props) | Yield<void>          | update specified entity with new props, if no props changed, nothing to write to storage |
-| subscribe(listener)   | Unsubscribe function | add a change listener. It will be called any time an entity manipulated                  |
+| name                    | type/return          | description                                                                              |
+| :---------------------- | -------------------- | ---------------------------------------------------------------------------------------- |
+| name                    | string               | schema name                                                                              |
+| create(props)           | Yield<Entity>        | create new entity with specified props                                                   |
+| exist(entityKey)        | Yield<bool>          | check entity existing by its key                                                         |
+| remove(...entityKeys)   | Yield<void>          | remove multiple entities by their keys                                                   |
+| count()                 | Yield<number>        | return a number of entity in the schema                                                  |
+| all()                   | Yield<Entity[]>      | return all entities in the schema                                                        |
+| all(limit)              | Yield<Entity[]>      | return first N entities in the schema                                                    |
+| all(entityKeys)         | Yield<Entity[]>      | return all entities that matches given keys                                              |
+| all(predicateFn)        | Yield<Entity[]>      | return all entities that matches given **predicateFn**                                   |
+| all(predicateFn, limit) | Yield<Entity[]>      | return first N entities that matches given **predicateFn**                               |
+| get(entityKey)          | Yield<Entity>        | get entity by key                                                                        |
+| get(predicateFn)        | Yield<Entity>        | get first entity that matches given **predicateFn**                                      |
+| clear()                 | Yield<void>          | clear all entities in the schema                                                         |
+| update(entity, props)   | Yield<void>          | update specified entity with new props, if no props changed, nothing to write to storage |
+| subscribe(listener)     | Unsubscribe function | add a change listener. It will be called any time an entity manipulated                  |
 
 ### Generator Function
 

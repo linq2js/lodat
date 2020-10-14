@@ -593,11 +593,16 @@ function update(entity, props) {
   });
 }
 
-function all(schemaName, input) {
+function all(schemaName, input, limit) {
+  if (typeof input === "number") {
+    limit = input;
+    input = undefined;
+  }
   const predicate = typeof input === "function" ? input : undefined;
   const entityKeys = predicate ? undefined : input;
   const options = {
     collectValues: true,
+    maxLength: limit || 0,
   };
   return new Command(
     (context) => query(context, schemaName, entityKeys, predicate),

@@ -74,7 +74,9 @@ export interface Schema<TEntity = Entity> {
   exist(key: EntityKey): Command<boolean>;
   count(): Command<number>;
   all(): Command<TEntity[]>;
+  all(limit: number): Command<TEntity[]>;
   all(keys: EntityKey[]): Command<TEntity[]>;
+  all(keys: EntityKey[], limit: number): Command<TEntity[]>;
   all(predicate: Predicate<TEntity>): Command<TEntity[]>;
   get(key: EntityKey): Command<TEntity>;
   get(predicate: Predicate<TEntity>): Command<TEntity>;
