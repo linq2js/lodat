@@ -25,7 +25,7 @@ const db = lodat({
   // specify initial data
   initial: { count: 1 },
   // this action will be called after db created
-  // note: this is a functional generator, we will take a look at this later on
+  // note: this is a functional generator, we will take a look at this later on (please refer Generator Function)
   *init() {
     render();
   },

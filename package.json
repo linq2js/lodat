@@ -1,6 +1,6 @@
 {
   "name": "lodat",
-  "version": "0.0.9",
+  "version": "0.0.10",
   "description": "Powerful persistent store for Javascript",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
