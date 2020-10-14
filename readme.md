@@ -22,15 +22,11 @@ const db = lodat({
   // in this case, we want to store data in localStorage,
   // of course, we can specify other storages: sessionStorage, AsyncStorage or customized storage
   storage: localStorage,
+  // specify initial data
+  initial: { count: 1 },
   // this action will be called after db created
   // note: this is a functional generator, we will take a look at this later on
-  *init({ get, set }) {
-    // read count value from storage
-    const count = yield get("count");
-    // set default value for count if it is not defined yet
-    if (typeof count === "undefined") {
-      yield set("count", 0);
-    }
+  *init() {
     render();
   },
 });
@@ -113,6 +109,7 @@ function* getTodoByKey(context, key) {
   | name     | string                                    | database name (def = '')                                 |
   | storage  | Storage object                            | specify storage type will be used (def = memoryStorage)  |
   | debounce | number                                    | specify writing debouncing (def = 0, no debouncing)      |
+  | initial  | any                                       | specify default data                                     |
   | init     | [Generator Function](#generator-function) | specify an action will be executed in initializing phase |
   | schemas  | string[]                                  | list of schema names                                     |
   | schemas  | { prop: 'schema name' }                   | schema mappings                                          |

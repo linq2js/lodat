@@ -5,12 +5,15 @@ export default function lodat({
   init,
   debounce = 0,
   storage = memoryStorage,
-  defaultSchema = "*",
+  // defaultSchema = "*",
+  initial,
   schemas,
 } = {}) {
   const context = {
     debounce,
-    defaultSchema,
+    defaultSchema: "*",
+    initial,
+    definitions: {},
     storage: createStorageWrapper(name, storage),
     schemas: {},
     promises: {},
@@ -18,7 +21,7 @@ export default function lodat({
     writes: [],
     schema,
     flush,
-    onChange: createEventSource(),
+    onUpdate: createEventSource(),
     subscribe,
     clear,
     get,
@@ -33,7 +36,7 @@ export default function lodat({
 
   function clear() {
     Object.values(context.schemas).forEach((schema) => schema.clear());
-    context.onChange.notify({ type: "clear" });
+    context.onUpdate.notify({ type: "clear" });
   }
 
   function flush() {
@@ -42,7 +45,7 @@ export default function lodat({
   }
 
   function subscribe(subscription) {
-    return context.onChange.add(subscription);
+    return context.onUpdate.add(subscription);
   }
 
   function exec(generator, payload) {
@@ -73,12 +76,7 @@ export default function lodat({
   }
 
   function schema(name) {
-    let s = context.schemas[name];
-    if (!s) {
-      s = new Schema(context, name, new Set());
-      context.schemas[name] = s;
-    }
-    return s;
+    return getSchema(context, name);
   }
 
   context.__allSchemaLoadingPromise = loadAllSchemas(context);
@@ -112,6 +110,7 @@ export default function lodat({
         });
 
     entries.forEach(([prop, schemaDef]) => {
+      context.definitions[schemaDef.name] = schemaDef;
       Object.defineProperty(context, prop, {
         get() {
           return context.schema(schemaDef.name);
@@ -168,22 +167,22 @@ export const memoryStorage = (function () {
   };
 })();
 
-function getDefaultSchema(context) {
-  let schema = context.schemas[context.defaultSchema];
+function getSchema(context, name, ids = []) {
+  let schema = context.schemas[name];
   if (!schema) {
-    context.schemas[context.defaultSchema] = schema;
-    schema = new Schema(context, context.defaultSchema, new Set());
+    schema = new Schema(context, name, new Set(ids), context.definitions[name]);
+    context.schemas[name] = schema;
   }
   return schema;
 }
 
 function get(prop) {
   return new Command(function* (context) {
-    const schema = getDefaultSchema(context);
+    const schema = getSchema(context, context.defaultSchema);
     const key = `${schema.name}.*`;
     let entity;
     if (!schema.keys.size) {
-      entity = yield schema.create({}, key);
+      entity = yield schema.create(context.initial, key);
     } else {
       entity = yield schema.get(key);
     }
@@ -193,7 +192,7 @@ function get(prop) {
 
 function set(prop, value) {
   return new Command(function* (context) {
-    const schema = getDefaultSchema(context);
+    const schema = getSchema(context, context.defaultSchema);
     const key = `${schema.name}.*`;
     let entity;
     if (!schema.keys.size) {
@@ -458,10 +457,10 @@ function exist(schemaName, key) {
 
 async function loadSchema(context, schemaName) {
   const idListString = await context.storage.get(schemaName + ".0");
-  const schema = new Schema(
+  const schema = getSchema(
     context,
     schemaName,
-    new Set(idListString ? idListString.split("|") : [])
+    idListString ? idListString.split("|") : []
   );
   context.schemas[schemaName] = schema;
   delete context.promises[schemaName];
@@ -470,17 +469,18 @@ async function loadSchema(context, schemaName) {
 }
 
 class Schema {
-  constructor(context, name, Keys) {
+  constructor(context, name, Keys, definition) {
+    this.definition = definition || {};
     this.context = context;
     this.name = name;
     this.keys = Keys;
     this.entityArray = [];
     this.entityMap = {};
-    this.onChange = createEventSource();
+    this.onUpdate = createEventSource();
   }
 
   subscribe(subscription) {
-    return this.onChange.add(subscription);
+    return this.onUpdate.add(subscription);
   }
 
   add(id, entity) {
@@ -490,8 +490,11 @@ class Schema {
     writeSchema(this.context, this);
   }
 
-  create(...args) {
-    return create(this.name, ...args);
+  create(props, ...args) {
+    if (typeof props === "undefined") {
+      props = this.definition.default;
+    }
+    return create(this.name, props, ...args);
   }
 
   remove(...args) {
@@ -532,7 +535,7 @@ class Schema {
       entityMap: {},
     });
 
-    this.onChange.notify({ type: "clear", schema: this.name });
+    this.onUpdate.notify({ type: "clear", schema: this.name });
   }
 }
 
@@ -555,15 +558,11 @@ function create(schemaName, props, customKey) {
   return new Command(function* (context) {
     const key = customKey || generateId(schemaName);
     const entity = new Entity(schemaName, key, props);
-    let schema = context.schemas[schemaName];
-    if (!schema) {
-      schema = new Schema(context, schemaName, new Set());
-      context.schemas[schemaName] = schema;
-    }
+    const schema = getSchema(context, schemaName);
     schema.add(entity.key, entity);
     const event = { entity, type: "create", schema: schema.name };
-    schema.onChange.notify(event);
-    context.onChange.notify(event);
+    schema.onUpdate.notify(event);
+    context.onUpdate.notify(event);
     writeEntity(context, entity);
     writeSchemas(context);
     return entity;
@@ -587,8 +586,8 @@ function update(entity, props) {
     Object.assign(entity._props, props);
     Object.assign(entity, props);
     const event = { entity, type: "update", schema: entity._schema };
-    context.schemas[entity._schema].onChange.notify(event);
-    context.onChange.notify(event);
+    context.schemas[entity._schema].onUpdate.notify(event);
+    context.onUpdate.notify(event);
     writeEntity(context, entity);
   });
 }
@@ -666,8 +665,8 @@ function remove() {
           keys: removedKeys,
         };
         writeSchema(context, schema);
-        schema.onChange.notify(event);
-        context.onChange.notify(event);
+        schema.onUpdate.notify(event);
+        context.onUpdate.notify(event);
         writeData(
           context,
           ...removedKeys.map((id) => ["remove", entityStorageKey(id)])

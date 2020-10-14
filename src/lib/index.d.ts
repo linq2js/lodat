@@ -94,7 +94,10 @@ export interface Options<TDefaultEntity> {
   /**
    * specific schema name that used to store default entity
    */
-  defaultSchema?: string;
+  // defaultSchema?: string;
+
+  initial?: PlainObject;
+
   /**
    * specific debounce time for writing updated data to the storage
    */
@@ -128,6 +131,7 @@ export interface SyncStorage {
 
 export interface SchemaDef {
   name: string;
+  default?: PlainObject;
 }
 
 export type SchemaDefinitions =

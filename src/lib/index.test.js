@@ -222,6 +222,20 @@ test("default schema", async () => {
   expect(value2).toBe("TodoApp");
 });
 
+test("default values", async () => {
+  const db = lodat({
+    initial: {
+      count: 1,
+    },
+  });
+
+  const count = await db.exec(function* (context) {
+    return yield context.get("count");
+  });
+
+  expect(count).toBe(1);
+});
+
 test("predefined schemas", async () => {
   const db = lodat({ schemas: { todos: "todo" } });
   await db.exec(function* ({ todos }) {
