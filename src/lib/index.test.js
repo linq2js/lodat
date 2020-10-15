@@ -272,9 +272,15 @@ test("async storage", async () => {
 
   expect(count1).toBe(4);
 
+  await new Promise((resolve) => storage.getAll(resolve)).then(console.log);
+
+  await delay(10);
+
   const db2 = lodat(options);
 
   const count2 = await db2.exec(getCount);
 
   expect(count2).toBe(4);
+
+  const allData = await new Promise((resolve) => storage.getAll(resolve));
 });

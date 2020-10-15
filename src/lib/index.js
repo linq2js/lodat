@@ -66,7 +66,7 @@ export default function lodat({
         ? generator
         : function* () {
             yield context.__loadAllSchemaCommand;
-            return yield new Command(generator);
+            return yield new Command(generator, { payload });
           },
       context,
     });
@@ -169,7 +169,7 @@ export function createMemoryStorage(isAsync) {
 
   return {
     getItem(key, callback) {
-      callback(storage[key]);
+      callback(null, storage[key]);
     },
     setItem(key, value, callback) {
       storage[key] = value;
@@ -187,7 +187,7 @@ export function createMemoryStorage(isAsync) {
       callback && callback();
     },
     multiGet(keys, callback) {
-      callback(keys.map((key) => storage[key]));
+      callback(null, keys.map((key) => storage[key]));
     },
     multiRemove(keys, callback) {
       for (let i = 0; i < keys.length; i++) {
@@ -200,7 +200,7 @@ export function createMemoryStorage(isAsync) {
       callback && callback();
     },
     getAll(callback) {
-      return callback(storage);
+      return callback(null, storage);
     },
   };
 }
@@ -212,6 +212,7 @@ function getSchema(context, name, ids = []) {
   if (!schema) {
     schema = new Schema(context, name, new Set(ids), context.definitions[name]);
     context.schemas[name] = schema;
+    writeSchemas(context);
   }
   return schema;
 }
@@ -335,10 +336,14 @@ function createStorageWrapper(dbName, storage) {
       if (Array.isArray(key)) {
         storage.multiGet(
           key.map((k) => `${prefix}${k}`),
-          callback
+          (e, data) => {
+            return callback(data);
+          }
         );
       } else {
-        storage.getItem(`${prefix}${key}`, callback);
+        storage.getItem(`${prefix}${key}`, (e, data) => {
+          return callback(data);
+        });
       }
     },
     remove(key, callback) {
@@ -353,12 +358,13 @@ function createStorageWrapper(dbName, storage) {
     },
     set(key, value, callback) {
       if (Array.isArray(key)) {
+        callback = value;
         storage.multiSet(
           key.map(([k, value]) => [
             `${prefix}${k}`,
             typeof value === "function" ? value() : value,
           ]),
-          value
+          callback
         );
       } else {
         storage.setItem(
@@ -374,7 +380,7 @@ function createStorageWrapper(dbName, storage) {
 function wrapLocalStorage(storage) {
   return {
     getItem(key, callback) {
-      callback(storage.getItem(key));
+      callback(null, storage.getItem(key));
     },
     setItem(key, value, callback) {
       storage.setItem(key, value);
@@ -392,7 +398,10 @@ function wrapLocalStorage(storage) {
       callback && callback();
     },
     multiGet(keys, callback) {
-      return callback(keys.map((key) => storage.getItem(key)));
+      return callback(
+        null,
+        keys.map((key) => storage.getItem(key))
+      );
     },
     multiRemove(keys, callback) {
       for (let i = 0; i < keys.length; i++) {
@@ -526,7 +535,6 @@ function* loadSchema(context, schemaName) {
   );
   context.schemas[schemaName] = schema;
   delete context.promises[schemaName];
-  writeSchemas(context);
   return schema;
 }
 
@@ -617,7 +625,7 @@ function writeData(context, ...actions) {
 }
 
 function create(schemaName, props, customKey) {
-  return new Command(function* (context) {
+  return new Command(function (context) {
     const key = customKey || generateId(schemaName);
     const entity = new Entity(schemaName, key, props);
     const schema = getSchema(context, schemaName);
@@ -625,8 +633,8 @@ function create(schemaName, props, customKey) {
     const event = { entity, type: "create", schema: schema.name };
     schema.onUpdate.notify(event);
     context.onUpdate.notify(event);
+    writeSchema(context, schema);
     writeEntity(context, entity);
-    writeSchemas(context);
     return entity;
   });
 }
@@ -672,7 +680,7 @@ function all(schemaName, input, limit) {
 }
 
 function count(schemaName) {
-  return new Command(function* (context) {
+  return new Command(function (context) {
     const schema = context.schemas[schemaName];
     return schema ? schema.keys.size : 0;
   });
@@ -680,7 +688,7 @@ function count(schemaName) {
 
 function entity(schemaName, input) {
   const predicate = typeof input === "function" ? input : undefined;
-  const entityKeys = predicate ? undefined : input;
+  const entityKeys = predicate ? undefined : [input];
   const options = {
     collectValues: true,
     maxLength: 1,
@@ -695,9 +703,9 @@ function entity(schemaName, input) {
 }
 
 function remove() {
-  if (typeof arguments[0] == "string") {
+  if (typeof arguments[0] === "string") {
     const [schemaName, ...entityKeys] = arguments;
-    return new Command(function* (context) {
+    return new Command(function (context) {
       const schema = context.schemas[schemaName];
       if (!schema) return;
       const removedKeys = [];
