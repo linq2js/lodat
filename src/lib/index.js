@@ -1,5 +1,15 @@
 const noop = () => {};
 
+const allSchemasKey = "schemas";
+
+function schemaStorageKey(context, schemaName) {
+  return `${context.name}/${schemaName}/keys`;
+}
+
+function entityStorageKey(key) {
+  return "#" + key;
+}
+
 export default function lodat({
   name = "",
   init,
@@ -10,8 +20,9 @@ export default function lodat({
   schemas,
 } = {}) {
   const context = {
+    name: "",
     debounce,
-    defaultSchema: "*",
+    defaultSchema: "__def",
     initial,
     definitions: {},
     storage: createStorageWrapper(name, storage),
@@ -187,7 +198,10 @@ export function createMemoryStorage(isAsync) {
       callback && callback();
     },
     multiGet(keys, callback) {
-      callback(null, keys.map((key) => storage[key]));
+      callback(
+        null,
+        keys.map((key) => [key, storage[key]])
+      );
     },
     multiRemove(keys, callback) {
       for (let i = 0; i < keys.length; i++) {
@@ -220,7 +234,7 @@ function getSchema(context, name, ids = []) {
 function get(prop) {
   return new Command(function* (context) {
     const schema = getSchema(context, context.defaultSchema);
-    const key = `${schema.name}.*`;
+    const key = `${schema.name}/data`;
     let entity;
     if (!schema.keys.size) {
       entity = yield schema.create(context.initial, key);
@@ -234,7 +248,7 @@ function get(prop) {
 function set(prop, value) {
   return new Command(function* (context) {
     const schema = getSchema(context, context.defaultSchema);
-    const key = `${schema.name}.*`;
+    const key = `${schema.name}/data`;
     let entity;
     if (!schema.keys.size) {
       yield schema.create(
@@ -258,7 +272,7 @@ function set(prop, value) {
 function writeSchemas(context) {
   writeData(context, [
     "set",
-    "all",
+    allSchemasKey,
     () => Object.keys(context.schemas).join("|"),
   ]);
 }
@@ -269,7 +283,7 @@ function asyncCallback(fn) {
 
 function* loadAllSchemas(context) {
   const schemaListString = yield asyncCallback((callback) =>
-    context.storage.get("all", callback)
+    context.storage.get(allSchemasKey, callback)
   );
   const schemaNames = schemaListString ? schemaListString.split("|") : [];
   yield schemaNames.map((schemaName) =>
@@ -319,7 +333,7 @@ function flushWrites(context, force) {
 }
 
 function createStorageWrapper(dbName, storage) {
-  const prefix = dbName ? `#${dbName}.` : "#.";
+  const prefix = dbName ? `${dbName}/` : "/";
   if (storage !== memoryStorage) {
     // is async storage
     if (typeof storage.multiGet === "function") {
@@ -400,7 +414,7 @@ function wrapLocalStorage(storage) {
     multiGet(keys, callback) {
       return callback(
         null,
-        keys.map((key) => storage.getItem(key))
+        keys.map((key) => [key, storage.getItem(key)])
       );
     },
     multiRemove(keys, callback) {
@@ -517,7 +531,7 @@ function isPromiseLike(obj) {
 }
 
 function exist(schemaName, key) {
-  return new Command(function* (context) {
+  return new Command(function (context) {
     const schema = context.schemas[schemaName];
     if (!schema) return false;
     return schema.keys.has(key);
@@ -526,7 +540,7 @@ function exist(schemaName, key) {
 
 function* loadSchema(context, schemaName) {
   const idListString = yield asyncCallback((callback) =>
-    context.storage.get(schemaName + ".0", callback)
+    context.storage.get(schemaStorageKey(context, schemaName), callback)
   );
   const schema = getSchema(
     context,
@@ -595,7 +609,7 @@ class Schema {
     writeData(
       this.context,
       // remove schema
-      ["remove", this.name + ".0"],
+      ["remove", schemaStorageKey(this.context, this.name)],
       // remove entities
       ...Array.from(this.keys).map((key) => ["remove", key])
     );
@@ -612,7 +626,7 @@ class Schema {
 function writeSchema(context, schema) {
   writeData(context, [
     "set",
-    schema.name + ".0",
+    schemaStorageKey(context, schema.name),
     () => Array.from(schema.keys).join("|"),
   ]);
 }
@@ -746,10 +760,6 @@ function remove() {
   }
 }
 
-function entityStorageKey(key) {
-  return "#" + key;
-}
-
 function* query(context, schemaName, entityKeys, predicate) {
   const schema = context.schemas[schemaName];
   if (!schema) return;
@@ -807,13 +817,10 @@ async function loadEntities(context, schemaName, entityKeys) {
         // if (!entityData[i]) {
         //   // throw new Error(`Entity #${entityId} does not exist`);
         // }
+        // console.log('entity', entityData)
         schema.add(
           entityId,
-          new Entity(
-            schemaName,
-            entityId,
-            JSON.parse(entityData[i] || "{}") || {}
-          )
+          new Entity(schemaName, entityId, JSON.parse(entityData[i][1]) || {})
         );
         delete context.promises[entityId];
       }
