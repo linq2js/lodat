@@ -92,6 +92,14 @@ function* getTodoByKey(context, key) {
 }
 ```
 
+## Storing data in cookie
+
+```jsx
+import { CookieStorage } from "cookie-storage";
+
+const db = lodat({ storage: new CookieStorage() });
+```
+
 ## Examples
 
 1. [Todo App](https://codesandbox.io/s/lodat-todo-cmrod?file=/src/index.js)

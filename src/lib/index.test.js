@@ -3,6 +3,7 @@ import lodat, {
   Command,
   memoryStorage,
   createEventSource,
+  createMemoryStorage,
 } from "./index.js";
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -241,4 +242,39 @@ test("predefined schemas", async () => {
   await db.exec(function* ({ todos }) {
     expect(todos).not.toBeUndefined();
   });
+});
+
+test("async storage", async () => {
+  const storage = createMemoryStorage(true);
+  const options = {
+    storage,
+    initial: {
+      count: 1,
+    },
+  };
+  const db1 = lodat(options);
+
+  function* increase({ set }) {
+    yield set("count", (prev) => {
+      return prev + 1;
+    });
+  }
+
+  function* getCount({ get }) {
+    return yield get("count");
+  }
+
+  await db1.exec(increase);
+  await db1.exec(increase);
+  await db1.exec(increase);
+
+  const count1 = await db1.exec(getCount);
+
+  expect(count1).toBe(4);
+
+  const db2 = lodat(options);
+
+  const count2 = await db2.exec(getCount);
+
+  expect(count2).toBe(4);
 });

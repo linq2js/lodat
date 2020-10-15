@@ -48,12 +48,12 @@ export default function lodat({
     return context.onUpdate.add(subscription);
   }
 
-  function exec(generator, payload) {
+  function exec(generator, payload, callback) {
     let resolved = false;
     let promiseResolve = undefined;
     let returnValue = undefined;
 
-    function callback(result) {
+    function callbackWrapper(result) {
       resolved = true;
       returnValue = result;
       promiseResolve && promiseResolve(result);
@@ -61,25 +61,28 @@ export default function lodat({
 
     handleGenerator({
       payload,
-      callback,
+      callback: callbackWrapper,
       generator: context.schemasReady
         ? generator
         : function* () {
-            yield context.__allSchemaLoadingPromise;
+            yield context.__loadAllSchemaCommand;
             return yield new Command(generator);
           },
       context,
     });
-
     if (resolved) return returnValue;
-    return new Promise((resolve) => (promiseResolve = resolve));
+    if (typeof callback !== "function") {
+      return new Promise((resolve) => (promiseResolve = resolve));
+    } else {
+      promiseResolve = callback;
+    }
   }
 
   function schema(name) {
     return getSchema(context, name);
   }
 
-  context.__allSchemaLoadingPromise = loadAllSchemas(context);
+  context.__loadAllSchemaCommand = new Command(loadAllSchemas);
 
   if (typeof init === "function") {
     exec(init);
@@ -127,7 +130,41 @@ export default function lodat({
   };
 }
 
-export const memoryStorage = (function () {
+export function createMemoryStorage(isAsync) {
+  if (isAsync) {
+    const ms = createMemoryStorage();
+    const performAsync = (fn) => {
+      Promise.resolve().then(fn);
+    };
+
+    return {
+      getItem() {
+        performAsync(() => ms.getItem(...arguments));
+      },
+      setItem() {
+        performAsync(() => ms.setItem(...arguments));
+      },
+      removeItem() {
+        performAsync(() => ms.removeItem(...arguments));
+      },
+      clear() {
+        performAsync(() => ms.clear(...arguments));
+      },
+      getAll() {
+        performAsync(() => ms.getAll(...arguments));
+      },
+      multiGet() {
+        performAsync(() => ms.multiGet(...arguments));
+      },
+      multiSet() {
+        performAsync(() => ms.multiSet(...arguments));
+      },
+      multiRemove() {
+        performAsync(() => ms.multiRemove(...arguments));
+      },
+    };
+  }
+
   let storage = {};
 
   return {
@@ -150,7 +187,7 @@ export const memoryStorage = (function () {
       callback && callback();
     },
     multiGet(keys, callback) {
-      return callback(keys.map((key) => storage[key]));
+      callback(keys.map((key) => storage[key]));
     },
     multiRemove(keys, callback) {
       for (let i = 0; i < keys.length; i++) {
@@ -158,14 +195,17 @@ export const memoryStorage = (function () {
       }
       callback && callback();
     },
-    clear() {
+    clear(callback) {
       storage = {};
+      callback && callback();
     },
-    getAll() {
-      return storage;
+    getAll(callback) {
+      return callback(storage);
     },
   };
-})();
+}
+
+export const memoryStorage = createMemoryStorage();
 
 function getSchema(context, name, ids = []) {
   let schema = context.schemas[name];
@@ -197,7 +237,12 @@ function set(prop, value) {
     let entity;
     if (!schema.keys.size) {
       yield schema.create(
-        { [prop]: typeof value === "function" ? value() : value },
+        {
+          [prop]:
+            typeof value === "function"
+              ? value((context.initial || {})[prop])
+              : value,
+        },
         key
       );
     } else {
@@ -217,11 +262,24 @@ function writeSchemas(context) {
   ]);
 }
 
-async function loadAllSchemas(context) {
-  const schemaListString = await context.storage.get("all");
+function asyncCallback(fn) {
+  return new Command(fn, { type: "callback" });
+}
+
+function* loadAllSchemas(context) {
+  const schemaListString = yield asyncCallback((callback) =>
+    context.storage.get("all", callback)
+  );
   const schemaNames = schemaListString ? schemaListString.split("|") : [];
-  await Promise.all(
-    schemaNames.map((schemaName) => loadSchema(context, schemaName))
+  yield schemaNames.map((schemaName) =>
+    asyncCallback((callback) =>
+      handleGenerator({
+        generator: loadSchema,
+        context,
+        callback,
+        payload: schemaName,
+      })
+    )
   );
   context.schemasReady = true;
 }
@@ -273,48 +331,42 @@ function createStorageWrapper(dbName, storage) {
   }
 
   return {
-    get(key) {
-      return new Promise((resolve) => {
-        if (Array.isArray(key)) {
-          storage.multiGet(
-            key.map((k) => `${prefix}${k}`),
-            resolve
-          );
-        } else {
-          storage.getItem(`${prefix}${key}`, resolve);
-        }
-      });
+    get(key, callback) {
+      if (Array.isArray(key)) {
+        storage.multiGet(
+          key.map((k) => `${prefix}${k}`),
+          callback
+        );
+      } else {
+        storage.getItem(`${prefix}${key}`, callback);
+      }
     },
-    remove(key) {
-      return new Promise((resolve) => {
-        if (Array.isArray(key)) {
-          storage.multiRemove(
-            key.map((k) => `${prefix}${k}`),
-            resolve
-          );
-        } else {
-          storage.removeItem(`${prefix}${key}`, resolve);
-        }
-      });
+    remove(key, callback) {
+      if (Array.isArray(key)) {
+        storage.multiRemove(
+          key.map((k) => `${prefix}${k}`),
+          callback
+        );
+      } else {
+        storage.removeItem(`${prefix}${key}`, callback);
+      }
     },
-    set(key, value) {
-      return new Promise((resolve) => {
-        if (Array.isArray(key)) {
-          storage.multiSet(
-            key.map(([k, value]) => [
-              `${prefix}${k}`,
-              typeof value === "function" ? value() : value,
-            ]),
-            resolve
-          );
-        } else {
-          storage.setItem(
-            `${prefix}${key}`,
+    set(key, value, callback) {
+      if (Array.isArray(key)) {
+        storage.multiSet(
+          key.map(([k, value]) => [
+            `${prefix}${k}`,
             typeof value === "function" ? value() : value,
-            resolve
-          );
-        }
-      });
+          ]),
+          value
+        );
+      } else {
+        storage.setItem(
+          `${prefix}${key}`,
+          typeof value === "function" ? value() : value,
+          callback
+        );
+      }
     },
   };
 }
@@ -383,13 +435,17 @@ export function handleGenerator({
 
       if (result.value instanceof Command) {
         const command = result.value;
-        return handleGenerator({
-          context,
-          ...command,
-          callback(result) {
-            return next(command.map ? command.map(result) : result);
-          },
-        });
+        if (command.type === "callback") {
+          return command.generator(next);
+        } else {
+          return handleGenerator({
+            context,
+            ...command,
+            callback(result) {
+              return next(command.map ? command.map(result) : result);
+            },
+          });
+        }
       }
 
       if (Array.isArray(result.value) && result.value[0] instanceof Command) {
@@ -408,7 +464,11 @@ export function handleGenerator({
             handleGenerator({ context, ...command });
             callback(undefined);
           } else {
-            handleGenerator({ context, ...command, callback });
+            if (command.type === "callback") {
+              command.generator(callback);
+            } else {
+              handleGenerator({ context, ...command, callback });
+            }
           }
         });
         return;
@@ -455,8 +515,10 @@ function exist(schemaName, key) {
   });
 }
 
-async function loadSchema(context, schemaName) {
-  const idListString = await context.storage.get(schemaName + ".0");
+function* loadSchema(context, schemaName) {
+  const idListString = yield asyncCallback((callback) =>
+    context.storage.get(schemaName + ".0", callback)
+  );
   const schema = getSchema(
     context,
     schemaName,
@@ -572,7 +634,7 @@ function create(schemaName, props, customKey) {
 function writeEntity(context, entity) {
   writeData(context, [
     "set",
-    "#" + entity.key,
+    entityStorageKey(entity.key),
     () => JSON.stringify(entity._props),
   ]);
 }
@@ -726,25 +788,28 @@ async function loadEntities(context, schemaName, entityKeys) {
   });
 
   if (unloadedEntityKeys.length) {
-    const loadEntitiesPromise = context.storage
-      .get(unloadedEntityKeys.map((key) => entityStorageKey(key)))
-      .then((entityData) => {
-        for (let i = 0; i < unloadedEntityKeys.length; i++) {
-          const entityId = unloadedEntityKeys[i];
-          // if (!entityData[i]) {
-          //   // throw new Error(`Entity #${entityId} does not exist`);
-          // }
-          schema.add(
+    const loadEntitiesPromise = new Promise((resolve) =>
+      context.storage.get(
+        unloadedEntityKeys.map((key) => entityStorageKey(key)),
+        resolve
+      )
+    ).then((entityData) => {
+      for (let i = 0; i < unloadedEntityKeys.length; i++) {
+        const entityId = unloadedEntityKeys[i];
+        // if (!entityData[i]) {
+        //   // throw new Error(`Entity #${entityId} does not exist`);
+        // }
+        schema.add(
+          entityId,
+          new Entity(
+            schemaName,
             entityId,
-            new Entity(
-              schemaName,
-              entityId,
-              JSON.parse(entityData[i] || "{}") || {}
-            )
-          );
-          delete context.promises[entityId];
-        }
-      });
+            JSON.parse(entityData[i] || "{}") || {}
+          )
+        );
+        delete context.promises[entityId];
+      }
+    });
     for (let i = 0; i < unloadedEntityKeys.length; i++) {
       context.promises[unloadedEntityKeys[i]] = loadEntitiesPromise;
     }
